@@ -86,13 +86,42 @@ public void PriceChanged(Tick t)
                  SendOrders(t.Price);
                  firstorder = false;
              }
+             // Yeni alım koşulunu kontrol et
+             if (!firstorder && GetAverageCost() > CurrentPrice && GetTotalHoldingAmount() < MaxAmount)
+             {
+                 // Koşullar karşılandı, güncel fiyattan yeni bir alım emri gönder
+                 double targetBuyPrice = CurrentPrice; // Ortalama maliyeti düşürmek için güncel fiyattan al
+                 int lotMiktari = (int)(Amount / targetBuyPrice);
+                 if (lotMiktari == 0)
+                     lotMiktari = 1;
+
+                 // Bu emri eklemenin MaxAmount'ı aşıp aşmayacağını kontrol et
+                 if (GetTotalHoldingAmount() + (targetBuyPrice * lotMiktari) <= MaxAmount)
+                 {
+                     // totalHoldingAmount += targetBuyPrice * lotMiktari; // Bu güncelleme GetTotalHoldingAmount tarafından daha sonra ele alınır
+                     var buyOrderID = SendOrder(Symbol2, Directions.BUY, lotMiktari, PriceTypes.Limit, Math.Round(targetBuyPrice,2));
+                     if (!string.IsNullOrEmpty(buyOrderID))
+                     {
+                         buyOrders.Add(buyOrderID, (targetBuyPrice, lotMiktari, null));
+                         SendMessage(MessageTypes.Log, $"Koşula göre yeni alım emri gönderildi: Fiyat={targetBuyPrice}, Miktar={lotMiktari}, Id={buyOrderID}");
+                     }
+                     else
+                     {
+                          SendMessage(MessageTypes.Log, $"Koşula göre yeni alım emri gönderilemedi: Fiyat={targetBuyPrice}");
+                     }
+                 }
+                 else
+                 {
+                     SendMessage(MessageTypes.Log, "Yeni alım koşulu karşılandı, ancak emir eklemek MaxAmount'ı aşar. Emir gönderilmiyor.");
+                 }
+             }
              // Tarih kontrolü yapıyoruz
              //fiyasa emir giriş saati 09:55 olup recalculateMinute girilmişse saat 10 da gonderilen emirleri silip yeniden gonderiyor.//
              //bunu engellemek için saat yazılan emir iptali için saat 10 şartı eklendi. istenmezse "DateTime.Now.Hour >= 10 &&" silinmeli//
              if (DateTime.Now.Hour >= 10 && DateTime.Now > Tarih)
              {
                  if (!isCancellingOrders)
-                 {   
+                 {
                      isCancellingOrders = true; // Emirleri iptal etmeye başlıyoruz
                      // Tüm bekleyen alım emirlerini iptal ediyoruz
                      var buyOrderIds = buyOrders.Keys.ToList(); // Kopyasını alıyoruz
@@ -139,6 +168,7 @@ public void PriceChanged(Tick t)
     }
 }
  // Emir durumu değiştiğinde çağrılan fonksiyon 
+//  alım veya satış emrini takip edip emir gerçekleştiğinde yapılacaklar yazılıyor
  public void OrderStatusChanged(Order o)
  {
      try
@@ -540,5 +570,3 @@ public void SendOrders(double currentPrice)
          SendMessage(MessageTypes.Log, $"Exception in AdjustFilledPositionsAfterSell: {ex.Message}");
      }
  }
-
-
